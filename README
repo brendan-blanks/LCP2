@@ -1,0 +1,208 @@
+PROJECT 2: Out-of-Order
+MADE BY: BRENDAN BLANKS
+DUE: October 27, 2011
+CONTACT: bfb09c@fsu.edu / blanks@cs.fsu.edu / brendan.blanks2@gmail.com
+
+Simulator for Little Computer 2008 architecture
+
+Notes: I was unable to account for a strange error involving the Reorder 
+Buffer wrapping around to odd values. For some reason, it seems to think 
+that 16 % 16 = 5 or 6 or some other random incorrect value. 
+
+=======================================================
+
+The program acquires machine code previously assembled from a filename 
+passed as a command line argument. It verifies the accessibility of the 
+file, then passes the machine code to the simulator. The program assumes 
+the file contains machine code for the LC architecture. Other contents 
+will result in a program failure and an attempt to fill the entire memory 
+with zeroes. PLEASE BE CAREFUL ABOUT THIS!
+
+The simulator creates a machine and then initializes all states and 
+counters with zeroes other than the predictor which is initialized to the 
+global constant INITIALPREDICTION.
+The instruction memory(read-only) is initialized with the machine code from 
+the file passed in. The data memory(read-write access) is updated to match 
+the instruction memory for early register initializations. 
+
+=======================================================
+
+In-Order Fetch/Commital
+Out-of-Order Execution
+Multiple Instructions/cycle
+Pipelined implementation
+6 phase cycle
+
+=======================================================
+
+The cycle starts and the machine state is printed out.
+
+The simulator checks for a retiring halt command (from the prior cycle's
+Commit phase). If a halt is detected, the final counts are printed out and
+the simulator ends.
+
+A temporary machine is created to contain changes made during simulation 
+to preserve data integrity. The cycles counter increments.
+
+=======================================================
+
+CO: Commit
+Somewhat similar to the writeback phase of a traditional five-cycle pipeline,
+the Commit phase "commits" to any changes made during this phase, whether
+updating the Architected Register File, making a branch, or halting. The
+only (and notable!) exception to this is Store Word, which stores to memory
+at the end of execution.
+Commit performs in the same order that fetch occured in, preserving program 
+order and preventing non-RAW data hazards. A Reorder Buffer is implemented
+in a Queue design to help preserve the flow of the program.
+The Commit phase is capable of Committing up to two instructions per cycle,
+and it always commits in order. N.B.: this may lead to hang ups as even
+if you have 100 instructions ready to commit and the oldest is not yet
+ready, none can commit. Commit determines instruction age simply by grabbing
+the head element of the Reorder Buffer. Committing, and thus retiring, an
+instruction invalidates the register rename performed by the instruction 
+in the Rename phase as well as flushing out its Reorder Buffer Entry.
+
+=======================================================
+
+EX: Execution
+Just like with a traditional pipeline, execution is where all the
+exciting stuff happens. Everything calculates here. There are three functional
+units, allowing for three instructions to be executed simultaneously: an
+integer-based memory access (address calculation), a floating point arithmetic
+pipeline, and a floating point multiplication path. Arithmetic operations take
+only one cycle to calculate, but memory access takes three cycles while 
+multiplication slugs at a whopping 6 cycles for execution alone.
+
+=======================================================
+
+SC: Schedule
+This is where the tricky stuff happens. It is here where the simulator
+decides what order to execute the instructions it has been given. While
+instructions do require their dependancies to be satisfied, beyond that, there
+is little limit in deciding which instructions should be executed first. For
+simplicity's sake, a traditional in-order pioritization set up is used. Note
+that this follows along with the in-order nature of the rest of the simulator.
+
+AL: Allocate
+Note: if the Reservation Stations or Reorder Buffer manage to fill up for
+whatever reason, this and the follow two phases stall and wait for a 
+vacancy. Checking for this is performed here, so this phase begins to
+execute, but aborts early.
+In this phase, the simulator pulls register renamed instructions and
+gives them an all the data needed for them to give to the execution
+framework. It is from here that instructions have their "fates" determined.
+
+=======================================================
+
+The following stages do not execute if there is a stall
+
+=======================================================
+
+RN: Rename (only on no stall)
+This phase handles all causes and effects of register renaming. Incoming 
+instructions with a destination update the Rename Table by setting the 
+validity bit of the entry corresponding to their destination to 1. The
+Rename Table entry is then filled with the location where the 
+instruction will reside inside of the Reorder Buffer. If the source
+registers are marked with a 1 in the Rename Table, the source registers
+of the instruction are overwritten with the value of the entry, and 
+flags are set to notify the simulator whether the register being used
+is an architected register or a physical one. The instruction is taken
+from the IFRN pipeline register and the results of the rename phase,
+as well as the PCPlus1 and the instruction itself, are all passed to the
+RNAL pipeline register.
+
+=======================================================
+
+IF: Instruction Fetch (only on no stall)
+Check if the program is stalling for a yes-predicted branch. If not...
+Pull an instruction from memory at the address in the program counter (PC).
+The instruction is passed into the IFID pipeline register.
+
+If waiting for a yes-predicted branch, a noop is inserted into the IFID 
+pipeline register. 
+
+Otherwise, the program counter increments and the new value is inserted 
+into the pcPlus1 slot in the IFRN pipeline register. The 
+instructionsFetched counter is incremented.
+
+If the instruction fetched is a branch and the predictor predicts that it 
+will be taken, a flag(branching) in the simulator is set so that the 
+simulator will wait for the yes-predicted register.
+
+If the instruction is a halt, a flag is set so that the simulator does
+not access any further instructions. This is done for ease of 
+understanding the state of the machine.
+
+If no stalls are setup, then the simulator fetches another instruction
+from memory in the same way as the first. If the first was a branch, 
+however, and the second is also a branch, the simulator cancels the 
+fetch and does not increment the PC.
+
+=======================================================
+
+The cycle is at this point finished and the machine is replaced with the 
+temporary machine created at the beginning of the cycle, simulating an 
+edge-triggered state.
+
+=======================================================
+
+Test Suite
+
+=======================================================
+
+Test1
+A very basic program that ensures that the program and simulator load 
+and exit properly. No hazards in this test.
+
+=======================================================
+
+Test2
+A simple arithmetic program. Tests unary operation, addition with a 
+"constant," and a single-layered data hazard(only one dependency). Final 
+values should be 4, -1, 3, and 6.
+
+=======================================================
+
+Test3
+An evolution of the previous program. Tests unary operation, addition with 
+a "constant," a single-layered data hazard, and a double-layered data 
+hazard(both fields are dependent). Final values should be 4, -1, 3, 6, and 
+11.
+
+=======================================================
+
+Test4
+A simple decrementer program, but the first test to test control hazard 
+handling. Tests single-layered data hazards, back-to-back branches, 
+dependent memory access, and looping. Final values should be 0 and -1.
+
+=======================================================
+
+Test5
+A more complex decrementer program, evolved from the previous two 
+programs. Tests back-to-back branches, single-layered data hazards, 
+double-layered data hazards, multiple dependencies(dependence on two 
+previous instructions), dependent memory access, and looping. Final values 
+should be -2, -1, 3, and 0.
+
+=======================================================
+
+Test6
+A complex program. The first with nested loops. Tests back-to-back 
+branches, nested loops, single-layered data hazards, double-layered 
+data hazards, multiple dependencies, multiplication, and dependent memory 
+access. Final values should be 1, 5, 3, 0, 3, 0, and 15.
+
+=======================================================
+
+Test7
+A powerfully complex program evolved from the previous program. Features 
+array-like memory access. Tests nested loops, single-layered data 
+hazards, double-layered data hazards, multiple dependencies, dependent 
+memory access, variable caching, multiplication, and a two-layered 
+array(3x5). Final values should be 1, 5, 3, 15, 3, 0, and 15. Also, there 
+should be a length-15 array in data memory located immediately after 
+instruction memory with values consistent with a 3x5 times 
+table(1,2,3,4,5,2,4,6,...)
