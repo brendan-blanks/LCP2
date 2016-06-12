@@ -52,7 +52,7 @@ the Commit phase "commits" to any changes made during this phase, whether
 updating the Architected Register File, making a branch, or halting. The
 only (and notable!) exception to this is Store Word, which stores to memory
 at the end of execution.
-Commit performs in the same order that fetch occured in, preserving program 
+Commit performs in the same order that fetch occurred in, preserving program 
 order and preventing non-RAW data hazards. A Reorder Buffer is implemented
 in a Queue design to help preserve the flow of the program.
 The Commit phase is capable of Committing up to two instructions per cycle,
